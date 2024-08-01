@@ -1,4 +1,4 @@
-package com.plcoding.cameraxguide
+package com.plcoding.cameraxguide.presentation
 
 import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView

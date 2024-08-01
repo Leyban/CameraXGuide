@@ -25,28 +25,29 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.GppGood
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.plcoding.cameraxguide.presentation.CameraPreview
 import com.plcoding.cameraxguide.ui.theme.CameraXGuideTheme
 import kotlinx.coroutines.launch
 
@@ -62,11 +63,38 @@ class MainActivity : ComponentActivity() {
             CameraXGuideTheme {
                 val scope = rememberCoroutineScope()
                 val scaffoldState = rememberBottomSheetScaffoldState()
+                // Don't need this
+//                var classifications by remember {
+//                    mutableStateOf(emptyList<Classification>())
+//                }
+                var validFace by remember {
+                    mutableStateOf(false)
+                }
+                var liveness by remember {
+                    mutableStateOf(false)
+                }
+                val analyzer = remember {
+                    ImageAnalyzer(
+                        context = applicationContext,
+                        onFaceAnalysis = {
+                            validFace = it
+                        },
+                        onLivenessAnalysis = {
+                            liveness = it
+                        },
+                    )
+                }
                 val controller = remember {
                     LifecycleCameraController(applicationContext).apply {
                         setEnabledUseCases(
                             CameraController.IMAGE_CAPTURE or
                                     CameraController.VIDEO_CAPTURE
+                            // Add
+                             or CameraController.IMAGE_ANALYSIS
+                        )
+                        setImageAnalysisAnalyzer(
+                            ContextCompat.getMainExecutor(applicationContext),
+                            analyzer
                         )
                     }
                 }
@@ -99,6 +127,7 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 controller.cameraSelector =
                                     if (controller.cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+                                        // TODO: Fix Front Camera
                                         CameraSelector.DEFAULT_FRONT_CAMERA
                                     } else CameraSelector.DEFAULT_BACK_CAMERA
                             },
@@ -109,6 +138,35 @@ class MainActivity : ComponentActivity() {
                                 imageVector = Icons.Default.Cameraswitch,
                                 contentDescription = "Switch camera"
                             )
+                        }
+
+                        Row {
+                            if (liveness) {
+                                Icon(
+                                    imageVector = Icons.Default.GppGood,
+                                    tint = Color.Green,
+                                    contentDescription = "Valid",
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.GppGood,
+                                    tint = Color.Red,
+                                    contentDescription = "Valid",
+                                )
+                            }
+                            if (validFace) {
+                                Icon(
+                                    imageVector = Icons.Default.Face,
+                                    tint = Color.Green,
+                                    contentDescription = "Valid",
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Face,
+                                    tint = Color.Red,
+                                    contentDescription = "Valid",
+                                )
+                            }
                         }
 
                         Row(
@@ -134,7 +192,7 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     takePhoto(
                                         controller = controller,
-                                        onPhotoTaken = viewModel::onTakePhoto
+                                        onPhotoTaken = viewModel::onTakePhoto,
                                     )
                                 }
                             ) {
@@ -152,7 +210,7 @@ class MainActivity : ComponentActivity() {
 
     private fun takePhoto(
         controller: LifecycleCameraController,
-        onPhotoTaken: (Bitmap) -> Unit
+        onPhotoTaken: (Bitmap) -> Unit,
     ) {
         controller.takePicture(
             ContextCompat.getMainExecutor(applicationContext),
@@ -162,6 +220,9 @@ class MainActivity : ComponentActivity() {
 
                     val matrix = Matrix().apply {
                         postRotate(image.imageInfo.rotationDegrees.toFloat())
+                        if (controller.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                            postScale(-1f, 1f)
+                        }
                     }
                     val rotatedBitmap = Bitmap.createBitmap(
                         image.toBitmap(),
